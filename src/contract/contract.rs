@@ -107,15 +107,31 @@ pub struct OutputAssignment<State: ExposedState> {
     pub opout: Opout,
     pub seal: Outpoint,
     pub state: State,
-    // `None` for state extensions
     pub witness: SealWitness,
 }
 
 impl<State: ExposedState> PartialEq for OutputAssignment<State> {
     fn eq(&self, other: &Self) -> bool {
         if self.opout == other.opout {
-            debug_assert_eq!(self.seal, other.seal);
-            debug_assert_eq!(self.state, other.state);
+            if self.seal != other.seal || self.witness != other.witness || self.state != other.state
+            {
+                panic!(
+                    "RGB was provided with an updated operation using different witness \
+                     transaction. This may happen for instance when some ephemeral state (like a \
+                     commitment or HTLC transactions in the lightning channels) are added to the \
+                     stash. This means the software calling RGB Core library has an invalid use \
+                     of RGB stash which has to be fixed.\n\nOperation id: {}\nPrevious and new \
+                     seal: {}, {}\nPrevious and new witness: {}, {}\nPrevious and new state: \
+                     {:?}, {:?}\n",
+                    self.opout,
+                    self.seal,
+                    other.seal,
+                    self.witness,
+                    other.witness,
+                    self.state,
+                    other.state,
+                )
+            }
         }
         self.opout == other.opout
     }
