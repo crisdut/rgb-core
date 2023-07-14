@@ -107,15 +107,31 @@ pub struct OutputAssignment<State: ExposedState> {
     pub opout: Opout,
     pub seal: Outpoint,
     pub state: State,
-    // `None` for state extensions
     pub witness: SealWitness,
 }
 
 impl<State: ExposedState> PartialEq for OutputAssignment<State> {
     fn eq(&self, other: &Self) -> bool {
         if self.opout == other.opout {
-            debug_assert_eq!(self.seal, other.seal);
-            debug_assert_eq!(self.state, other.state);
+            if self.seal != other.seal || self.witness != other.witness || self.state != other.state
+            {
+                panic!(
+                    "RGB was provided with an updated operation using different witness \
+                     transaction. This may happen for instance when some ephemeral state (like a \
+                     commitment or HTLC transactions in the lightning channels) are added to the \
+                     stash. This means the software calling RGB Core library has an invalid use \
+                     of RGB stash which has to be fixed.\n\nOperation id: {}\nPrevious and new \
+                     seal: {}, {}\nPrevious and new witness: {}, {}\nPrevious and new state: \
+                     {:?}, {:?}\n",
+                    self.opout,
+                    self.seal,
+                    other.seal,
+                    self.witness,
+                    other.witness,
+                    self.state,
+                    other.state,
+                )
+            }
         }
         self.opout == other.opout
     }
@@ -228,7 +244,7 @@ pub enum WitnessOrd {
 }
 
 impl WitnessOrd {
-    pub fn from_electrum_height(height: u32) -> Self {
+    pub fn with_mempool_or_height(height: u32) -> Self {
         WitnessHeight::new(height)
             .map(WitnessOrd::OnChain)
             .unwrap_or(OffChain)
@@ -268,15 +284,15 @@ impl Ord for WitnessAnchor {
 
 impl WitnessAnchor {
     pub fn new(ord: WitnessOrd, txid: Txid) -> Self { WitnessAnchor { ord, txid } }
-    pub fn with_mempool(txid: Txid) -> Self {
+    pub fn from_mempool(txid: Txid) -> Self {
         WitnessAnchor {
             ord: WitnessOrd::OffChain,
             txid,
         }
     }
-    pub fn with_electrum_height(height: u32, txid: Txid) -> Self {
+    pub fn with_mempool_or_height(mempool_or_height: u32, txid: Txid) -> Self {
         WitnessAnchor {
-            ord: WitnessOrd::from_electrum_height(height),
+            ord: WitnessOrd::with_mempool_or_height(mempool_or_height),
             txid,
         }
     }
@@ -323,7 +339,7 @@ impl GlobalOrd {
     }
     pub fn with_electrum_height(height: u32, txid: Txid, idx: u16) -> Self {
         GlobalOrd {
-            ord_txid: Some(WitnessAnchor::with_electrum_height(height, txid)),
+            ord_txid: Some(WitnessAnchor::with_mempool_or_height(height, txid)),
             idx,
         }
     }
